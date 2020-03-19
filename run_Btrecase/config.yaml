@@ -1,0 +1,24 @@
+##
+
+{
+    # directory to write all output data files to
+    "output_dir" :  "/mrc-bsu/scratch/ev250/psoriasis",
+
+    # sample meta data from array express for psoriasis data
+    "sample_meta" : "/mrc-bsu/scratch/ev250/psoriasis/sample_info/E-GEOD-54456.sdrf.txt",
+
+   
+    # filter read cut-off for total gene counts
+    
+    "filter": 100,
+
+    # path to reference panel map, sample, legend and hap files
+    'RPpath' : "/home/ev250/rds/rds-cew54-wallace-share/Data/reference/1000GP_Phase3",
+
+
+   
+      
+  
+}
+
+

@@ -1,0 +1,970 @@
+###########################################################################
+##Apply reference bias correction to psoriasis data 
+#########################################################################
+
+shell.prefix("source ~/.bashrc; ")
+
+
+configfile: "config.yaml"
+localrules: all3
+
+import pandas as pd
+import subprocess
+import os
+import math  
+from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+
+HTTP = HTTPRemoteProvider()
+
+subworkflow InputPrep:
+    workdir: "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/psoriasis"
+
+subworkflow PsoBtrecase:
+    workdir: "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/psoriasis/run_Btrecase"
+
+subworkflow GEU_refbias:
+    workdir:
+        "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/refbias"
+    
+           
+#include: "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/psoriasis/run_Btrecase/Snakefile"
+
+# print(getattr(vars(vars(vars(workflow)['_subworkflows']['InputPrep'])['workflow'])['globals']['srcdir'], '__doc__'))
+
+#print(vars(vars(vars(workflow)['_subworkflows']['InputPrep'])['workflow'])['globals']['config'].keys())
+
+# get home directories for Snakefiles in subdirectories to call Scripts/Functions etc avoiding duplication
+home_InputPrep = vars(vars(workflow)['_subworkflows']['InputPrep'])['_workdir']
+home_PsoBtrecase = vars(vars(workflow)['_subworkflows']['PsoBtrecase'])['_workdir']
+home_GEUrefbias = vars(vars(workflow)['_subworkflows']['GEU_refbias'])['_workdir']
+
+#print(home_GEUrefbias)
+
+
+## These functions are from /home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/psoriasis/Snakefile
+
+def info_samples(s=config['sample_meta']):
+    """
+    Gets sample info including names and fastq paths from the meta data file in array express.
+    input: full file name
+    output: data frame with sample meta data
+    """
+    data = pd.read_csv(s, sep="\t")
+    return data
+
+def dic_samples(var):
+    """ Get dict with keys sample names from metadata and values any column from metadata.
+    input: var is the variable name to use for dictionary values"""
+    values = list(info_samples()[var])
+    keys= list(info_samples()['Scan Name'])
+    dic = dict(zip(keys,values))
+    return dic
+     
+## These functions are from /home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/psoriasis/run_Btrecase/Snakefile
+
+def gene_chrom(File=config['output_dir'] + "/Btrecase/inputs/gene_inputs/genes2test.txt", sep=" "):
+    """ Makes a dictionary with keys gene and values chromosome from a file with first col gene_id and second col CHROM """
+    data=pd.read_csv(File, sep=sep)
+    keys=list(data['gene_id'])
+    values=[str(x) for x in data['CHROM']]
+    dic=dict(zip(keys,values))
+    return dic
+
+def gene_list(File=config['output_dir'] + "/Btrecase/results/fisher_genes.txt",
+              sep=" "):
+    """ From a 1 col file with no headers makes a list, defaults to genes to re-run in Btrecase due to low min pvalue for Fisher test"""
+    data=pd.read_csv(File, sep=sep)
+    return list(data['Gene_id'])
+
+def geneName_geneID(File=config['output_dir'] + "/Btrecase/results/full.stan.summary.txt", sep=" "):
+    """ Makes a dictionary with keys gene_name and values gene_id """
+    data=pd.read_csv(File, sep=sep)
+    keys=list(data['Gene_name'])
+    values=[str(x) for x in data['Gene_id']]
+    dic=dict(zip(keys,values))
+    return dic
+
+
+gc=gene_chrom(File=PsoBtrecase(config['output_dir'] + "/Btrecase/inputs/gene_inputs/genes2test.txt"))
+chroms=set(gc.values())
+pd_ex=info_samples(InputPrep(config['sample_meta']))[~info_samples()['Comment [ENA_RUN]'].isin(['SRR1146116','SRR1146118','SRR1146229'])]
+
+gene_names=['CALML5','DDR1','MLXIP','SPRR1B','VARS2','AQP3','CAST','CSTA','FUT2','GAPDH','GSTP1','KRT6A','KRT6B','LY6D','S100A14','SBSN','ERAP1','JUP','KRT14','KRT16','KRT6C','NFKBIZ','PI3','PPIF','RASIP1','RPS6KA4','SPRR1A','SPRR2B']
+
+#gene= gc.keys()
+
+## genes2run=subprocess.Popen('grep memory -l  /home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/psoriasis/run_Btrecase/refbias/logs/run_btrecaseRefBias2* | cut -d = -f2 | cut -d , -f1' ,shell=True,  stdout=subprocess.PIPE, encoding='ascii')
+
+#genel=[x.replace("\n", "") for x in genes2run.stdout.readlines()]
+
+#tissue=subprocess.Popen('grep memory -l  /home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/psoriasis/run_Btrecase/refbias/logs/run_btrecaseRefBias2* | cut -d = -f3 | cut -d . -f1' ,shell=True,  stdout=subprocess.PIPE, encoding='ascii')
+
+#tl=[x.replace("\n", "") for x in tissue.stdout.readlines()]
+
+
+
+rule all3:
+    input:
+        "Scripts/refbias_2T_info.pdf"
+        #expand(config['out_refbias'] + "/Btrecase/2Tissues/jointInfo_Fish001_hetInd/{SigGene}.2Tissues.summary.txt", SigGene=[geneName_geneID()[g] for g in gene_names] )
+        #expand(config['out_refbias'] + "/Btrecase/2Tissues/Fish001_hetInd/{SigGene}.2Tissues.summary.txt", SigGene=['ENSG00000164307'])
+        #config['output_dir'] + "/Btrecase/objects/rsid.txt"
+        #config['output_dir'] + "/Btrecase/objects/EURr.rds"
+        #expand(config['out_refbias'] + "/inputs/fSNP/chr.{chrom}.fSNP.RP.genes.txt", chrom=chroms)
+        #expand(config["out_refbias"] + "/post_remap/{sample}/Aligned.sortedByCoord.out.post_remapping_AI.txt", sample=pd_ex['Comment [ENA_RUN]'])
+        #expand(config['out_refbias'] + "/Btrecase/rna99/{gene}.{skin}.noGT.stan.summary.txt", gene= gc.keys() , skin=set(pd_ex['Comment [Sample_source_name]']) ),
+        #config["out_refbias"] + "/post_remap/pre_post_AI.txt"
+        #expand(config['out_refbias'] + "/Btrecase/ufSNPS/rna99/{gene}.{skin}.noGT.stan.summary.txt", zip, gene=genel , skin=tl )
+        #expand(config['out_refbias'] + "/Btrecase/2Tissues/output99/{SigGene}.2Tissues.summary.txt", SigGene=[geneName_geneID()[g] for g in gene_names] ),
+        #expand(config['out_refbias'] + "/Btrecase/2Tissues/output99/{SigGene}.2Tissues.summary.txt", SigGene=['ENSG00000057149'] )
+        #config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec_summary.txt"
+        #expand(config['out_refbias'] + "/Btrecase/ufSNPS/rna99/{gene}.{skin}.noGT.stan.summary.txt", gene= gc.keys() , skin=set(pd_ex['Comment [Sample_source_name]']) )
+        #config['out_refbias'] + "/Btrecase/results/normal_pso_ci99_BiasCorrec_summary.txt",
+        #"Scripts/refbias_normal_pso_ci99.pdf"
+        #"Scripts/refbias_2T.pdf"
+        #config['output_dir'] + "/eQTL_gtex/GTEx_Analysis_v7_eQTL.tar.gz"
+        #"Scripts/getx_assoc.pdf"
+        #expand(config['out_refbias'] + "/Btrecase/ufSNPS/refbias2/rna99/{gene}.{skin}.noGT.stan.summary.txt", gene= gc.keys() , skin=set(pd_ex['Comment [Sample_source_name]']) )
+        #expand(config['out_refbias'] + "/Btrecase/ufSNPS/refbias2/rna99/{gene}.{skin}.noGT.stan.summary.txt", gene= ['ENSG00000198624'] , skin=['normal_skin'] )
+        #config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec2_summary.txt"
+        #"Scripts/refbias2_normal_pso_ci99.pdf"
+        # expand(config['out_refbias'] + "/Btrecase/uplikelihood/rna/{rbias}.{gene}.{skin}.noGT.stan.summary.txt", gene= gc.keys() , skin=set(pd_ex['Comment [Sample_source_name]']), rbias=["norefbias", "refbias"])
+        # expand(config['out_refbias'] + "/Btrecase/uplikelihood/rna/{rbias}.{gene}.{skin}.noGT.stan.summary.txt", gene= ['ENSG00000198624'] , skin=['normal_skin'], rbias=["norefbias"])
+        #expand(config['out_refbias'] + "/Btrecase/SpikePrior/rna/{rbias}.{gene}.{skin}.noGT.stan.summary.txt", gene= gc.keys() , skin=set(pd_ex['Comment [Sample_source_name]']), rbias=["norefbias", "refbias"])      
+        #expand(config['out_refbias'] + "/Btrecase/SpikePrior/rna/{rbias}.{gene}.{skin}.noGT.stan.summary.txt",gene= ["ENSG00000111640", "ENSG00000137411", "ENSG00000153113", "ENSG00000164307", "ENSG00000178363", "ENSG00000057149", "ENSG00000173801"] , skin=set(pd_ex['Comment [Sample_source_name]']), rbias=["norefbias", "refbias"])
+        #expand(config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix_hetInd/{SigGene}.2Tissues.summary.txt", SigGene=[geneName_geneID()[g] for g in gene_names] )
+       # expand(config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix_hetInd/{SigGene}.2Tissues.summary.txt", SigGene=['ENSG00000164307'] )  
+        #"Scripts/refbias_2T2.pdf"
+        #expand(config['out_refbias'] + "/Btrecase/SpikePrior/{fisher}/rna/refbias.{gene}.{skin}.noGT.stan.summary.txt",  fisher=['fisher001'], gene= ['ENSG00000164307'] , skin=set(pd_ex['Comment [Sample_source_name]']))
+         #expand(config['out_refbias'] + "/Btrecase/2Tissues/Fish001_hetInd/{SigGene}.2Tissues.summary.txt", SigGene=[geneName_geneID()[g] for g in gene_names] )
+         #"Scripts/refbias_2T_fisher.pdf"
+         #config['out_refbias'] + "/Btrecase/results/r2_spike_gwas.txt"
+    
+    
+
+rule fSNP_coord:
+    """Get fSNP coordinates per gene"""
+    input:
+        ebg=config['ebg'],
+        legend=config['legend'] + "/1000GP_Phase3_chr{chrom}.legend.gz"
+    params:
+        maf=0.05,
+        pop="EUR"
+    output:
+        fsnps=config['out_refbias'] + "/inputs/fSNP/chr.{chrom}.fSNP.RP.genes.txt"
+    script:
+        "Scripts/fSNP_RP.R"
+
+rule prepare_remap:
+    """Prepares files for remapping and for computing number of reads matching each SNP plus AI. Initial AI should be 0.5. For each read overlapping SNPs a new read is generated by swapping alleles. Both new and old reads are saved in a fastq file(s), depending on being paired or single reads, for remapping"""
+    input:
+        bam=InputPrep(config['output_dir'] + "/STAR/{sample}/Aligned.sortedByCoord.out.bam")
+    output:
+        fastq=config["out_refbias"] + "/pre_remap/{sample}/Aligned.sortedByCoord.out.remap.fq.gz",
+        pre_AI=config["out_refbias"] + "/pre_remap/{sample}/Aligned.sortedByCoord.out.initial.AI.txt"
+    params:
+        snp_dir=config['out_refbias'] + "/inputs/fSNP",
+        out_dir=config["out_refbias"] + "/pre_remap/{sample}",
+        basq=10
+    shell:
+        "python {config[refbias_dir]}/intersecting_snps_v2.py "
+        " --is_sorted "
+        " --base_qual {params.basq} "
+        " --output_dir {params.out_dir} "
+        " --snp_dir {params.snp_dir} "
+        " {input.bam} "
+  
+rule map_star2:
+    """map reads a second time using STAR and index"""
+    input:
+        fastq=config["out_refbias"] + "/pre_remap/{sample}/Aligned.sortedByCoord.out.remap.fq.gz"
+    output:
+        config["out_refbias"] + "/STAR2/{sample}/Aligned.sortedByCoord.out.bam",
+        config["out_refbias"] + "/STAR2/{sample}/Aligned.sortedByCoord.out.bam.bai"
+    threads: 16
+    params:
+        index=config['indices'],
+        read="zcat",
+        out_dir=config["out_refbias"] + "/STAR2/{sample}/"
+    shell:
+        "{config[STAR]} "
+        " --runThreadN {threads} "
+        " --genomeDir {params.index} "
+        " --readFilesIn {input.fastq}  "
+        " --readFilesCommand {params.read} "
+        " --outSAMtype BAM SortedByCoordinate "
+        " --outFileNamePrefix {params.out_dir} "
+        " --outStd Log "
+        " {log} ;"
+        "samtools index {output[0]} "
+       
+rule AI_post_remapping:
+    """ Get AI post remapping for each sample """
+    input:
+        bam=config["out_refbias"] + "/STAR2/{sample}/Aligned.sortedByCoord.out.bam"
+    output:
+        AI=config["out_refbias"] + "/post_remap/{sample}/Aligned.sortedByCoord.out.post_remapping_AI.txt"
+    params:
+        snp_dir=config['out_refbias'] + "/inputs/fSNP",
+        output_dir=config['out_refbias'] + "/post_remap/{sample}"
+    shell:
+        "python {config[refbias_dir]}/intersecting_snps_post_remap_v2.py "
+        " --is_sorted "
+        " --output_dir {params.output_dir} "
+        " --snp_dir {params.snp_dir} "
+        " {input.bam} "
+
+
+rule get_AI: 
+    """Calculates AI for each SNP across all samples. Includes binomial test  for whether to keep AI estimates over 0.5. Binomial test using 99% CI"""
+    input:
+        pre=expand(config["out_refbias"] + "/pre_remap/{sample}/Aligned.sortedByCoord.out.initial.AI.txt", sample = pd_ex['Comment [ENA_RUN]']),
+        post=expand(config["out_refbias"] + "/post_remap/{sample}/Aligned.sortedByCoord.out.post_remapping_AI.txt", sample=pd_ex['Comment [ENA_RUN]'] )
+    output:
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt"
+    shell:
+        "python {config[refbias_dir]}/AI.py "
+        " --initial-AI {input.pre} "
+        " --post-remap_AI {input.post} "
+        " --output_file {output.AI} "
+
+rule run_btrecaseRefBias:
+    """Run associations excluding fSNPs with p-value for Fisher test lower than 10^-4. Also run with 99%CI and try refBias correction"""
+    input:
+        counts=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}.txt",    
+        libsize=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds",
+        eSNPs=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.genes.txt",
+        genecoord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        vcf=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/GT/chr" + gc[wildcards.gene] +  ".ASE." + wildcards.skin + ".vcf.gz", 
+        leRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".legend.gz",       
+        hapRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".hap.gz",        
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        model= config['model']
+    params:
+        chrom=lambda wildcards: gc[wildcards.gene],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        prob=0.99,
+        pfsnp=10**-4,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/rna99",
+        prefix= "{gene}.{skin}"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/rna99/{gene}.{skin}.noGT.stan.summary.txt"
+    script:      
+        home_GEUrefbias + "/Scripts/run_BtrecaseRefBias.R"        
+
+
+rule merge_sum:
+    """Merge stan summaries by skin type indicationg whether tag is fSNP or tagging an fSNP. Get EAF from fSNPs to allow correcting direction of effects with tag, if necessary"""
+    input:
+        oldsum=PsoBtrecase(config['output_dir']) + "/Btrecase/results/normal_pso_ci99_summary.txt",
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        legfile=expand(InputPrep(config['RPpath']) + "/1000GP_Phase3_chr{chrom}.legend.gz", chrom=chroms),
+        hapRef=expand(InputPrep(config['RPpath']) + "/1000GP_Phase3_chr{chrom}.hap.gz", chrom=chroms)
+    params:
+        out_stan=config['out_refbias'] + "/Btrecase/rna99"
+    threads:
+        16
+    output:
+        stan_sum=config['out_refbias'] + "/Btrecase/results/normal_pso_ci99_BiasCorrec_summary.txt"
+    script:
+        "Scripts/merge_sum.R"
+
+
+
+rule run_btrecaseRefBias2:
+    """Run associations excluding fSNPs that are not unique to one gene and  with p-value for Fisher test lower than 10^-4. Also run with 99%CI and try refBias correction"""
+       input:
+        counts=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}.txt",    
+        libsize=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds",
+        eSNPs=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.genes.txt",
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        vcf=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/GT/chr" + gc[wildcards.gene] +  ".ASE." + wildcards.skin + ".vcf.gz", 
+        leRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".legend.gz",       
+        hapRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".hap.gz",        
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        model= config['model']
+    params:
+        chrom=lambda wildcards: gc[wildcards.gene],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        prob=0.99,
+        pfsnp=10**-4,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/ufSNPS/rna99",
+        prefix= "{gene}.{skin}"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/ufSNPS/rna99/{gene}.{skin}.noGT.stan.summary.txt"
+    script:      
+        home_GEUrefbias + "/Scripts/run_BtrecaseRefBias.R"
+
+        
+rule merge_sum2:
+    """Merge stan summaries from run_btrecaseRefBias2 by skin type indicationg whether tag is fSNP or tagging an fSNP. Get EAF from fSNPs to allow correcting direction of effects with tag, if necessary"""
+    input:
+        oldsum=PsoBtrecase(config['output_dir']) + "/Btrecase/results/normal_pso_ci99_summary.txt",
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        legfile=expand(InputPrep(config['RPpath']) + "/1000GP_Phase3_chr{chrom}.legend.gz", chrom=chroms),
+        hapRef=expand(InputPrep(config['RPpath']) + "/1000GP_Phase3_chr{chrom}.hap.gz", chrom=chroms)
+    params:
+        out_stan=config['out_refbias'] + "/Btrecase/ufSNPS/rna99"
+    threads:
+        16
+    output:
+        stan_sum=config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec_summary.txt"
+    script:
+        "Scripts/merge_sum.R"
+
+        
+rule compare_btrecase_normal_pso:
+    """Compare output from normal vs psoriatic skin with CI99 and min pvalue for fisher test 10^-4, with and without reference panel bias correction"""
+    input:
+        stan_pre=PsoBtrecase(config['output_dir']) + "/Btrecase/results/normal_pso_ci99_summary.txt",
+        stan_post=config['out_refbias'] + "/Btrecase/results/normal_pso_ci99_BiasCorrec_summary.txt",
+        stan_post_ufsnsp=config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec_summary.txt",
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        script="Scripts/refbias_normal_pso_ci99.R"
+    params:
+        output_dir=config['output_dir'] + "/Btrecase/output99",
+        gtex_dir=config['output_dir'] + "/eQTL_gtex"
+    log:
+        "logs/compare_btrecase_normal_pso.log"
+    threads:
+        16
+    output:
+        "Scripts/refbias_normal_pso_ci99.pdf"
+    script:
+        #"Scripts/refbias_normal_pso_ci99.R"
+        home_GEUrefbias + "/Scripts/RenderReport.R"
+        
+rule gtex_assoc:
+    """ Look at direction of effects in gtex by tissue """
+    input:
+        ueSNPS=expand(InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr{chrom}.fSNP.unique.genes.txt", chrom=[x for x in range(1,23)]),
+        script="Scripts/gtex_assoc.R"
+    params:
+        gtex_dir=config['gtex_all']
+    output:
+        "Scripts/getx_assoc.pdf"
+    threads:
+        16
+    script:
+        #"Scripts/gtex_assoc.R"
+        home_GEUrefbias + "/Scripts/RenderReport.R"
+        
+rule run_2Tissues:
+    """Compare associations between normal and psoriasis skin in one model and ref bias correction. Use genes with at least a significant association in one of the tissues"""
+    input:
+        counts=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}.txt"), skin=["Psoriasis_skin","normal_skin"]   ),
+        libsize=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds"), skin=["Psoriasis_skin","normal_skin"]),
+        eSNPs=lambda wildcards: InputPrep(config['output_dir'] + "/Btrecase/inputs/fSNP/chr"+ gene_chrom()[wildcards.SigGene] + ".fSNP.genes.txt"),
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.SigGene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        vcf=lambda wildcards: expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/GT/chr" + gene_chrom()[wildcards.SigGene] +  ".ASE.{skin}.vcf.gz") , skin=["Psoriasis_skin","normal_skin"]),
+        leRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".legend.gz",
+        hapRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".hap.gz",
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt"
+    params:
+        gene="{SigGene}",
+        chrom=lambda wildcards: gene_chrom()[wildcards.SigGene],
+        skin=["Psoriasis_skin","normal_skin"],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        prob=0.99,
+        pfsnp=10**-4,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/2Tissues/output99"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/2Tissues/output99/{SigGene}.2Tissues.summary.txt"
+    script:
+        home_PsoBtrecase + "/Scripts/run_Btrecase2T.R"
+
+rule report_2T:
+    """ Look at the output of running 2T in one model """
+    input:
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        stan_sum=config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec_summary.txt",
+        eqtl_pso=expand(config['output_dir'] + "/pso_eQTL/{ind}subj_p1E-5_annotate_allcis_1Mb.tbl",
+                        ind=["NN57", "PP53"]),
+        script="Scripts/refbias_2T.R"
+    params:
+        stan_dir=config['out_refbias'] + "/Btrecase/2Tissues/output99",      
+        gtex_dir=config['output_dir'] + "/eQTL_gtex"
+    output:
+        "Scripts/refbias_2T.pdf"
+    script:
+        #"Scripts/refbias_2T.R"
+        home_GEUrefbias + "/Scripts/RenderReport.R"
+
+
+rule run_btrecaseRefBias3:
+    """Run associations excluding fSNPs that are not unique to one gene and  with p-value for Fisher test lower than 10^-4. Also run with 99%CI and try refBias correction version 2 (model2)"""
+       input:
+        counts=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}.txt",    
+        libsize=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds",
+        eSNPs=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.genes.txt",
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        vcf=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/GT/chr" + gc[wildcards.gene] +  ".ASE." + wildcards.skin + ".vcf.gz", 
+        leRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".legend.gz",       
+        hapRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".hap.gz",        
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        model= config['model2']
+    params:
+        chrom=lambda wildcards: gc[wildcards.gene],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        prob=0.99,
+        pfsnp=10**-4,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/ufSNPS/refbias2/rna99",
+        prefix= "{gene}.{skin}"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/ufSNPS/refbias2/rna99/{gene}.{skin}.noGT.stan.summary.txt"
+    script:      
+        home_GEUrefbias + "/Scripts/run_BtrecaseRefBias.R"
+
+rule merge_sum3:
+    """Merge stan summaries from run_btrecaseRefBias3 by skin type indicationg whether tag is fSNP or tagging an fSNP. Get EAF from fSNPs to allow correcting direction of effects with tag, if necessary"""
+    input:
+        oldsum=PsoBtrecase(config['output_dir']) + "/Btrecase/results/normal_pso_ci99_summary.txt",
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        legfile=expand(InputPrep(config['RPpath']) + "/1000GP_Phase3_chr{chrom}.legend.gz", chrom=chroms),
+        hapRef=expand(InputPrep(config['RPpath']) + "/1000GP_Phase3_chr{chrom}.hap.gz", chrom=chroms)
+    params:
+        out_stan=config['out_refbias'] + "/Btrecase/ufSNPS/refbias2/rna99"
+    threads:
+        16
+    output:
+        stan_sum=config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec2_summary.txt"
+    script:
+        "Scripts/merge_sum.R"
+
+rule compare_btrecase_normal_pso2:
+    """Compare output from normal vs psoriatic skin with CI99 and min pvalue for fisher test 10^-4, with and without reference panel bias correction2"""
+    input:
+        stan_pre=PsoBtrecase(config['output_dir']) + "/Btrecase/results/normal_pso_ci99_summary.txt",
+        #stan_post=config['out_refbias'] + "/Btrecase/results/normal_pso_ci99_BiasCorrec_summary.txt",
+        stan_post=config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec2_summary.txt",
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        script="Scripts/refbias2_normal_pso_ci99.R"
+    params:
+        stan_dir=config['out_refbias'] + "/Btrecase/ufSNPS/refbias2/rna99",
+        gtex_dir=config['output_dir'] + "/eQTL_gtex"
+    log:
+        "logs/compare_btrecase_normal_pso.log"
+    threads:
+        16
+    output:
+        "Scripts/refbias2_normal_pso_ci99.pdf"
+    script:
+        #"Scripts/refbias2_normal_pso_ci99.R"
+        home_GEUrefbias + "/Scripts/RenderReport.R"
+    
+
+rule run_btrecaseRefBias4:
+    """Run associations excluding fSNPs that are not unique to one gene and  with p-value for Fisher test lower than 10^-4. Also run with 95-99%CI and try with and without refBias correction version 2  and with corrected likelihood"""
+       input:
+        counts=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}.txt",    
+        libsize=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds",
+        eSNPs=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.genes.txt",
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        vcf=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/GT/chr" + gc[wildcards.gene] +  ".ASE." + wildcards.skin + ".vcf.gz", 
+        leRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".legend.gz",       
+        hapRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".hap.gz",        
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        model= lambda wildcards: config['StanNoGT2'] if wildcards.rbias == 'refbias' else config['StanNoGT2NoBias'] 
+    params:
+        chrom=lambda wildcards: gc[wildcards.gene],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        pfsnp=10**-4,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/uplikelihood/rna",
+        prefix= "{rbias}.{gene}.{skin}"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/uplikelihood/rna/{rbias}.{gene}.{skin}.noGT.stan.summary.txt"
+    script:      
+        home_GEUrefbias + "/Scripts/run_BtrecaseRefBias.R"
+
+
+## change json time to 3 hs for rule below, now 1h as I re-run fast genes
+rule run_btrecaseRefBias5:
+    """Run associations excluding fSNPs that are not unique to one gene and  with p-value for Fisher test lower than 10^-4. Also run with 95-99%CI and try with and without refBias correction version 2 with corrected likelihood and SpikeMixPrior. Prior is given as mean of 2 components, SD and mixing proportions""" 
+       input:
+        counts=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}.txt",    
+        libsize=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds",
+        eSNPs=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.genes.txt",
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        vcf=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/GT/chr" + gc[wildcards.gene] +  ".ASE." + wildcards.skin + ".vcf.gz", 
+        leRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".legend.gz",       
+        hapRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".hap.gz",        
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        model= lambda wildcards: config['StanNoGTAnyMixrefbias'] if wildcards.rbias == 'refbias' else config['StanNoGTAnyMixNoBias'] ,
+        model_negonly=config['NegOnlyMixPriorNoGT']
+    params:
+        chrom=lambda wildcards: gc[wildcards.gene],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        pfsnp=10**-4,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/SpikePrior/rna",
+        prior=[0,0, 0.0309, 0.3479, 0.97359164, 0.02640836],
+        prefix= "{rbias}.{gene}.{skin}"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/SpikePrior/rna/{rbias}.{gene}.{skin}.noGT.stan.summary.txt"
+    script:      
+        home_GEUrefbias + "/Scripts/run_BtrecaseRefBias.R"
+
+rule compare_btrecase_normal_pso_skikeMix:
+    """Compare output from normal vs psoriatic skin with CI99 and min pvalue for fisher test 10^-4, with and without reference panel bias correction2 and spikeMix prior"""
+    input:
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        script="Scripts/refbias2_normal_pso_ci99.R"
+    params:
+        stan_dir=config['out_refbias'] + "/Btrecase/SpikePrior/rna",
+        gtex_dir=config['output_dir'] + "/eQTL_gtex",
+        rbias=["norefbias", "refbias"],
+        skin=set(pd_ex['Comment [Sample_source_name]'])
+    output:
+        "Scripts/spikeMix_normal_pso.pdf"
+    script:
+        #"Scripts/refbias2_normal_pso_ci99.R"
+        home_GEUrefbias + "/Scripts/RenderReport.R"
+    
+
+rule run_2Tissues_spike:
+    """Compare associations between normal and psoriasis skin in one model and ref bias correction. Use genes with at least a significant association in one of the tissues. We use the same prior for ba and bd. The prior is a mixture of 3 components to account for no effect(sd= sqrt(2)*0.0309), weigth=(1-0.97359)^2), either tissue(sd=sqrt(0.309^2 + 0.3479^2), weigth=0.0264, both (sd=srt(2)*0.3479, weigth= 0.0264/2) """
+    input:
+        counts=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}.txt"), skin=["Psoriasis_skin","normal_skin"]   ),
+        libsize=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds"), skin=["Psoriasis_skin","normal_skin"]),
+        eSNPs=lambda wildcards: InputPrep(config['output_dir'] + "/Btrecase/inputs/fSNP/chr"+ gene_chrom()[wildcards.SigGene] + ".fSNP.genes.txt"),
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.SigGene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        vcf=lambda wildcards: expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/GT/chr" + gene_chrom()[wildcards.SigGene] +  ".ASE.{skin}.vcf.gz") , skin=["Psoriasis_skin","normal_skin"]),
+        leRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".legend.gz",
+        hapRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".hap.gz",
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt",
+        model=config['2TSpike']
+    params:
+        gene="{SigGene}",
+        chrom=lambda wildcards: gene_chrom()[wildcards.SigGene],
+        skin=["Psoriasis_skin","normal_skin"],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        prob=0.99,
+        prior=[0,0,0,math.sqrt(2)*0.0309, math.sqrt(0.0309**2 + 0.3479**2), math.sqrt(2)*0.3479, 0.97359164**2, 2*0.97359164*0.02640836, 0.02640836**2],
+        pfsnp=10**-4,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix/{SigGene}.2Tissues.summary.txt"
+    script:
+        home_PsoBtrecase + "/Scripts/run_Btrecase2T.R"
+
+rule run_2Tissues_spike_indHets:
+    """Same as run_2Tissues_spike but for each tissue run a separete Fisher test to select fSNPs. This way I can compare the same inputs run with individual model.  """
+    input:
+        counts=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}.txt"), skin=["Psoriasis_skin","normal_skin"]   ),
+        libsize=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds"), skin=["Psoriasis_skin","normal_skin"]),
+        eSNPs=lambda wildcards: InputPrep(config['output_dir'] + "/Btrecase/inputs/fSNP/chr"+ gene_chrom()[wildcards.SigGene] + ".fSNP.genes.txt"),
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.SigGene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        vcf=lambda wildcards: expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/GT/chr" + gene_chrom()[wildcards.SigGene] +  ".ASE.{skin}.vcf.gz") , skin=["Psoriasis_skin","normal_skin"]),
+        leRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".legend.gz",
+        hapRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".hap.gz",
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt",
+        model=config['2TSpike']
+    params:
+        gene="{SigGene}",
+        chrom=lambda wildcards: gene_chrom()[wildcards.SigGene],
+        skin=["Psoriasis_skin","normal_skin"],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        prob=0.99,
+        prior=[0,0,0,math.sqrt(2)*0.0309, math.sqrt(0.0309**2 + 0.3479**2), math.sqrt(2)*0.3479, 0.97359164**2, 2*0.97359164*0.02640836, 0.02640836**2],
+        pfsnp=10**-4,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix_hetInd"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix_hetInd/{SigGene}.2Tissues.summary.txt"
+    script:
+        "Scripts/run_Btrecase2T_indHets.R"      
+
+rule skin_sum_r2_EUR_rsnps:
+    """ Given the path for stan summaries calculate r2 between rsnps per gene selecting a group of individuals only (EUR) from reference panel. r2 is the same as previous rule but for EUR inds only."""
+    input:
+        gene_coord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        sample=config['RPpath'] + "/1000GP_Phase3.sample",
+        leRef=expand(config['RPpath'] + "/1000GP_Phase3_chr{chrom}.legend.gz", chrom=list(range(1,23))) ,
+        hapRef=expand(config['RPpath'] + "/1000GP_Phase3_chr{chrom}.hap.gz", chrom=list(range(1,23)))
+    params:       
+        group="EUR",
+        stan_single=config['out_refbias'] + "/Btrecase/SpikePrior/rna",
+        skin=set(pd_ex['Comment [Sample_source_name]']),
+        out_dir=config['output_dir'] + "/Btrecase/output99"
+    threads:
+        16
+    output:
+        r2=config['output_dir'] + "/Btrecase/objects/EURr2.rds",
+    script:
+        "Scripts/skin_sumr2.R"        
+       
+rule skin_sum_r_EUR_rsnps:
+    """ Same as previous rule but save r instead of r2"""
+    input:
+        gene_coord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        sample=config['RPpath'] + "/1000GP_Phase3.sample",
+        leRef=expand(config['RPpath'] + "/1000GP_Phase3_chr{chrom}.legend.gz", chrom=list(range(1,23))) ,
+        hapRef=expand(config['RPpath'] + "/1000GP_Phase3_chr{chrom}.hap.gz", chrom=list(range(1,23)))
+    params:       
+        group="EUR",
+        stan_single=config['out_refbias'] + "/Btrecase/SpikePrior/rna",
+        skin=set(pd_ex['Comment [Sample_source_name]']),
+        out_dir=config['output_dir'] + "/Btrecase/output99"
+    threads:
+        16
+    output:
+        r=config['output_dir'] + "/Btrecase/objects/EURr.rds",
+    script:
+        "Scripts/skin_sumr.R"
+
+rule get_rsid:
+    """ """
+    input:
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt"
+    params:
+        stan_single=config['out_refbias'] + "/Btrecase/SpikePrior/rna",
+        stan_dir2=config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix_hetInd",
+        rbias=["refbias"],
+        skin=set(pd_ex['Comment [Sample_source_name]'])
+    threads:
+        16
+    output:
+        out=config['output_dir'] + "/Btrecase/objects/rsid.txt"
+    script:
+        "Scripts/rsid.R"
+        
+        
+rule report_2T2:
+    """ Look at the output of running 2T in one model comparing to separate models. Look at DRG expression for psoriasis hits """
+    input:
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        stan_sum=config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec_summary.txt",
+        eqtl_pso=expand(config['output_dir'] + "/pso_eQTL/{ind}subj_p1E-5_annotate_allcis_1Mb.tbl",
+                        ind=["NN57", "PP53"]),
+        drg=PsoBtrecase(config['output_dir']) + "/pso_gwas/DRG_JID2014.xls",
+        r2=config['output_dir'] + "/Btrecase/objects/EURr2.rds",
+        r=config['output_dir'] + "/Btrecase/objects/EURr.rds",
+        rsid=config['output_dir'] + "/Btrecase/objects/rsid.txt",
+        script="Scripts/refbias_2T2.R"
+    params:
+        stan_dir=config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix",
+        stan_dir2=config['out_refbias'] + "/Btrecase/2Tissues/SpikeMix_hetInd",
+        stan_single=config['out_refbias'] + "/Btrecase/SpikePrior/rna",
+        sd_prior=[0.0309, math.sqrt(2)*0.0309],
+        sd_names=["ind","joint"],
+        rbias=["refbias"],
+        d=10**5,
+        skin=set(pd_ex['Comment [Sample_source_name]']),
+        colclass=["character"]+["numeric" for i in range(7)],
+        w=3000
+    output:
+        "Scripts/refbias_2T2.pdf"
+    script:
+        #"Scripts/refbias_2T2.R"
+        home_GEUrefbias + "/Scripts/RenderReport.R"
+
+## change json time to 3 hs for rule below, now 1h as I re-run fast genes
+
+rule run_btrecaseRefBias6:
+    """Run associations excluding fSNPs that are not unique to one gene and  with p-value for Fisher test lower than 10^-2, corrected formula to match ethnicity. Also run with 95-99%CI and try with  refBias correction version 2 with corrected likelihood and SpikeMixPrior. Prior is given as mean of 2 components, SD and mixing proportions""" 
+       input:
+        counts=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}.txt",  
+        libsize=InputPrep(config['output_dir']) + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds",
+        eSNPs=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.genes.txt",
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.gene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        vcf=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/GT/chr" + gc[wildcards.gene] +  ".ASE." + wildcards.skin + ".vcf.gz",
+        sample= config['RPpath'] + "/1000GP_Phase3.sample",
+        leRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".legend.gz",       
+        hapRef=lambda wildcards: InputPrep(config['RPpath']) + "/1000GP_Phase3_chr" + gc[wildcards.gene] + ".hap.gz",        
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt" ,
+        model= config['StanNoGTAnyMixrefbias']  ,
+        model_negonly=config['NegOnlyMixPriorNoGT']
+    params:
+        chrom=lambda wildcards: gc[wildcards.gene],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        pfsnp=10**-2,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/SpikePrior/{fisher}/rna",
+        prior=[0,0, 0.0309, 0.3479, 0.97359164, 0.02640836],
+        prefix= "refbias.{gene}.{skin}"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/SpikePrior/{fisher}/rna/refbias.{gene}.{skin}.noGT.stan.summary.txt"
+    wildcard_constraints:
+        fisher='fisher001'
+    script:      
+        home_GEUrefbias + "/Scripts/run_BtrecaseRefBias.R"
+
+        
+rule skin_sum_r_EUR_rsnps2:
+    """ Same as previous rule but after changing fisher cut-off"""
+    input:
+        gene_coord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        sample=config['RPpath'] + "/1000GP_Phase3.sample",
+        leRef=expand(config['RPpath'] + "/1000GP_Phase3_chr{chrom}.legend.gz", chrom=list(range(1,23))) ,
+        hapRef=expand(config['RPpath'] + "/1000GP_Phase3_chr{chrom}.hap.gz", chrom=list(range(1,23)))
+    params:       
+        group="EUR",
+        stan_single=config['out_refbias'] + "/Btrecase/SpikePrior/fisher001/rna",
+        #skin=set(pd_ex['Comment [Sample_source_name]']),
+        out_dir=config['output_dir'] + "/Btrecase/output99"
+    threads:
+        16
+    output:
+        r=config['output_dir'] + "/Btrecase/objects/fisher001EURr.rds",
+    script:
+        "Scripts/skin_sumr.R"
+
+rule run_2Tissues_spike_indHets_fisher001:
+    """Same as run_2Tissues_spike but for each tissue run a separete Fisher test to select fSNPs. This way I can compare the same inputs run with individual model.  """
+    input:
+        counts=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}.txt"), skin=["Psoriasis_skin","normal_skin"]   ),
+        libsize=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds"), skin=["Psoriasis_skin","normal_skin"]),
+        eSNPs=lambda wildcards: InputPrep(config['output_dir'] + "/Btrecase/inputs/fSNP/chr"+ gene_chrom()[wildcards.SigGene] + ".fSNP.genes.txt"),
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.SigGene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        vcf=lambda wildcards: expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/GT/chr" + gene_chrom()[wildcards.SigGene] +  ".ASE.{skin}.vcf.gz") , skin=["Psoriasis_skin","normal_skin"]),
+        sample= config['RPpath'] + "/1000GP_Phase3.sample",
+        leRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".legend.gz",
+        hapRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".hap.gz",
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt",
+        model=config['2TSpike']
+    params:
+        gene="{SigGene}",
+        chrom=lambda wildcards: gene_chrom()[wildcards.SigGene],
+        skin=["Psoriasis_skin","normal_skin"],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        prob=0.99,
+        prior=[0,0,0,math.sqrt(2)*0.0309, math.sqrt(0.0309**2 + 0.3479**2), math.sqrt(2)*0.3479, 0.97359164**2, 2*0.97359164*0.02640836, 0.02640836**2],
+        pfsnp=10**-2,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/2Tissues/Fish001_hetInd"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/2Tissues/Fish001_hetInd/{SigGene}.2Tissues.summary.txt"
+    script:
+        "Scripts/run_Btrecase2T_indHets.R"      
+
+
+rule report_2T2_fisher:
+    """ Look at the output of running 2T in one model comparing to separate models with new Fisher cut-off. Look at DRG expression for psoriasis hits """
+    input:
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        stan_sum=config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec_summary.txt",
+        eqtl_pso=expand(config['output_dir'] + "/pso_eQTL/{ind}subj_p1E-5_annotate_allcis_1Mb.tbl",
+                        ind=["NN57", "PP53"]),
+        drg=PsoBtrecase(config['output_dir']) + "/pso_gwas/DRG_JID2014.xls",
+        r=config['output_dir'] + "/Btrecase/objects/fisher001EURr.rds",
+        rsid=config['output_dir'] + "/Btrecase/objects/rsid.txt",
+        script="Scripts/refbias_2T_fisher.R"
+    params:
+        stan_dir2=config['out_refbias'] + "/Btrecase/2Tissues/Fish001_hetInd",
+        stan_single=config['out_refbias'] + "/Btrecase/SpikePrior/fisher001/rna",
+        sd_prior=[0.0309, math.sqrt(2)*0.0309],
+        sd_names=["ind","joint"],
+        rbias=["refbias"],
+        d=10**5,
+        skin=set(pd_ex['Comment [Sample_source_name]']),
+        colclass=["character"]+["numeric" for i in range(7)],
+        w=3000
+    output:
+        "Scripts/refbias_2T_fisher.pdf"
+    script:
+        #"Scripts/refbias_2T_fisher.R"
+        home_GEUrefbias + "/Scripts/RenderReport.R"
+
+rule format_btrecase_output:
+    """ For each gene and tag run either in normal or psoriasis get the r2between tag snps and gwas hit, rule adapted from PsoBtrecase"""
+    input:
+        gwas=PsoBtrecase(config['output_dir']) + "/pso_gwas/close_genes.txt",
+        gene_coord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        sample=config['RPpath'] + "/1000GP_Phase3.sample",
+        leRef=expand(config['RPpath'] + "/1000GP_Phase3_chr{chrom}.legend.gz", chrom=list(range(1,23))) ,
+        hapRef=expand(config['RPpath'] + "/1000GP_Phase3_chr{chrom}.hap.gz", chrom=list(range(1,23)))
+    params:
+        direc=expand(config['out_refbias'] + "/Btrecase/SpikePrior/{fisher}/rna", fisher=["fisher001"]),
+        pattern="^refbias.ENSG[0-9].*noGT.stan.summary.txt", ## any skin
+        group="EUR"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/results/r2_spike_gwas.txt"
+    script:
+        "Scripts/gwasr2tags.R"
+
+rule run_2Tissues_spike_jointInfo_fisher001:
+    """Same as run_2Tissues_spike but for each tissue run a separete Fisher test to select fSNPs. This way I can compare the same inputs run with individual model. I have now corrected info calculated based on all samples and not per skin. """
+    input:
+        counts=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}.txt"), skin=["Psoriasis_skin","normal_skin"]   ),
+        libsize=expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/Counts/{skin}_gc_lib_size.rds"), skin=["Psoriasis_skin","normal_skin"]),
+        eSNPs=lambda wildcards: InputPrep(config['output_dir'] + "/Btrecase/inputs/fSNP/chr"+ gene_chrom()[wildcards.SigGene] + ".fSNP.genes.txt"),
+        ueSNPS=lambda wildcards: InputPrep(config['output_dir']) + "/Btrecase/inputs/fSNP/chr"+ gc[wildcards.SigGene] + ".fSNP.unique.genes.txt",
+        genecoord=InputPrep(config['output_dir'] + "/Btrecase/inputs/gene_inputs/gene_info.txt"),
+        vcf=lambda wildcards: expand(InputPrep(config['output_dir'] + "/Btrecase/inputs/GT/chr" + gene_chrom()[wildcards.SigGene] +  ".ASE.{skin}.vcf.gz") , skin=["Psoriasis_skin","normal_skin"]),
+        sample= config['RPpath'] + "/1000GP_Phase3.sample",
+        leRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".legend.gz",
+        hapRef=lambda wildcards: config['RPpath'] + "/1000GP_Phase3_chr" + gene_chrom()[wildcards.SigGene] + ".hap.gz",
+        AI=config["out_refbias"] + "/post_remap/pre_post_AI.txt",
+        model=config['2TSpike']
+    params:
+        gene="{SigGene}",
+        chrom=lambda wildcards: gene_chrom()[wildcards.SigGene],
+        skin=["Psoriasis_skin","normal_skin"],
+        snps=5*10**5,
+        pop="EUR",
+        maf=0.05,
+        minAse=5,
+        minAseSnp=5,
+        minAseN=5,
+        tag=0.9,
+        info=0.3,
+        prob=0.99,
+        prior=[0,0,0,math.sqrt(2)*0.0309, math.sqrt(0.0309**2 + 0.3479**2), math.sqrt(2)*0.3479, 0.97359164**2, 2*0.97359164*0.02640836, 0.02640836**2],
+        pfsnp=10**-2,
+        pretotalReads=100,
+        out=config['out_refbias'] + "/Btrecase/2Tissues/jointInfo_Fish001_hetInd"
+    threads:
+        16
+    output:
+        config['out_refbias'] + "/Btrecase/2Tissues/jointInfo_Fish001_hetInd/{SigGene}.2Tissues.summary.txt"
+    script:
+        "Scripts/run_Btrecase2T_joinInfo.R"      
+
+
+rule report_2T2_info:
+    """ Look at the output of running 2T in one model comparing to separate models with new Fisher cut-off and info computed jointly across all samples. Look at DRG expression for psoriasis hits """
+    input:
+        gene_coord=InputPrep(config['output_dir']) + "/Btrecase/inputs/gene_inputs/gene_info.txt",
+        stan_sum=config['out_refbias'] + "/Btrecase/results/ufSNPS/normal_pso_ci99_BiasCorrec_summary.txt",
+        eqtl_pso=expand(config['output_dir'] + "/pso_eQTL/{ind}subj_p1E-5_annotate_allcis_1Mb.tbl",
+                        ind=["NN57", "PP53"]),
+        drg=PsoBtrecase(config['output_dir']) + "/pso_gwas/DRG_JID2014.xls",
+        r=config['output_dir'] + "/Btrecase/objects/fisher001EURr.rds",
+        rsid=config['output_dir'] + "/Btrecase/objects/rsid.txt",
+        script="Scripts/refbias_2T_info.R"
+    params:
+        stan_dir2=config['out_refbias'] + "/Btrecase/2Tissues/jointInfo_Fish001_hetInd",
+        stan_single=config['out_refbias'] + "/Btrecase/SpikePrior/fisher001/rna",
+        sd_prior=[0.0309, math.sqrt(2)*0.0309],
+        sd_names=["ind","joint"],
+        rbias=["refbias"],
+        d=10**5,
+        skin=set(pd_ex['Comment [Sample_source_name]']),
+        colclass=["character"]+["numeric" for i in range(7)],
+        w=3000
+    output:
+        "Scripts/refbias_2T_info.pdf"
+    script:
+        #"Scripts/refbias_2T_info.R"
+        home_GEUrefbias + "/Scripts/RenderReport.R"
+
+        
+        
+## ENSG00000186832 reported no fsnp above fisher cut-off for 2T but run ok for normal and psoriasis 1 model, perhaps too stringent cut-off?
+
+        
+## snakemake  -k -j 500 --cluster-config cpu.json --cluster "sbatch -A {cluster.account} -p {cluster.partition}  -c {cluster.cpus-per-task}   -t {cluster.time} --output {cluster.error} -J {cluster.job} "
+
+## snakemake  -k -j 500 --cluster-config himem.json --cluster "sbatch -A {cluster.account} -p {cluster.partition}  -c {cluster.cpus-per-task}   -t {cluster.time} --output {cluster.error} -J {cluster.job} "
+
+##ENSG00000164307 ERAP1 for himem

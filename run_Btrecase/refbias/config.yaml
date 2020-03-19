@@ -1,0 +1,78 @@
+##
+
+{
+    # directory to write all output data files to
+    "output_dir" :  "/mrc-bsu/scratch/ev250/psoriasis",
+
+    # sample meta data from array express for psoriasis data
+    "sample_meta" : "/mrc-bsu/scratch/ev250/psoriasis/sample_info/E-GEOD-54456.sdrf.txt",
+
+   
+    # filter read cut-off for total gene counts
+    
+    "filter": 100,
+
+    # path to reference panel map, sample, legend and hap files
+    'RPpath' : "/home/ev250/rds/rds-cew54-wallace-share/Data/reference/1000GP_Phase3",
+
+
+    #################### for reference bias correction ##########################
+
+
+    # REFBIAS directory containing scripts
+    "refbias_dir" : "/home/ev250/bin/RefBias",
+
+    # output directory
+
+    "out_refbias": "/mrc-bsu/scratch/ev250/psoriasis/refbias",
+
+    # ebg file
+
+    "ebg": "/mrc-bsu/scratch/ev250/EGEUV1/quant/RNA_counts/b37_ebg.rds",
+
+    # path to legend files
+    "legend" : "/home/ev250/rds/rds-cew54-wallace-share/Data/reference/1000GP_Phase3",
+
+    # path to STAR
+    "STAR" : "/mrc-bsu/scratch/ev250/bin/STAR/source/STAR",
+
+    # files to make STAR indices
+    "ref_fasta" : "/home/ev250/rds/hpc-work/reference_genome/built37/Homo_sapiens.GRCh37.dna.primary_assembly.fa",
+
+    "ref_gtf" :  "/home/ev250/rds/hpc-work/reference_genome/built37/Homo_sapiens.GRCh37.87.gtf",
+    
+    "indices" : "/mrc-bsu/scratch/ev250/reference_genome/built37/indices",
+
+    # file to stan model to run without rsnp GTs
+
+    'model': "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/neg.beta.noGT.rsnp.prior02.refbias.stan",
+
+    'model2': "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/neg.beta.noGT.rsnp.prior02.refbias2.stan",
+
+    'StanNoGT2' : "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/neg.beta.noGT2.rsnp.prior02.refbias2.stan",
+
+    #stan model no ref bias correction noGT
+    'StanNoGT2NoBias' :  "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/neg.beta.noGT2.rsnp.prior02.eff2.stan",
+
+    #stan model no ref bias correction noGT prior any mix
+    
+    'StanNoGTAnyMixNoBias' : "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/neg.beta.noGT2.rsnp.generalprior.eff2.stan",
+
+    # stan model refbias version 2 prior any mix no GT
+
+    'StanNoGTAnyMixrefbias' :  "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/neg.beta.noGT2.rsnp.generalprior.refbias2.stan",
+
+    # stan model neg only with any mix prior for no GT
+
+    'NegOnlyMixPriorNoGT' : "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/neg.only.noGT2.rsnp.generalprior.refbias2.stan",
+
+    # stan model 2T ref bias and Spike Mixture prior
+
+    '2TSpike' :  "/home/ev250/Bayesian_inf/trecase/Scripts/stan_eff/real_data/psoriasis/run_Btrecase/Scripts/2TrefbiasV2SpikeMix.stan" ,
+    
+    # dir with all GTex tissues (www.gtexportal.org/home/datasets, needed to download to local computer, untar and transfer to cluster as I got error message when untaring from cluster. 
+
+    'gtex_all': '/mrc-bsu/scratch/ev250/GTEx_Analysis_v7_eQTL',
+}
+
+
